@@ -1,3 +1,4 @@
+![alt tag](https://github.com/Bennyelg/csvql/blob/master/logo.png)
 # csvql - nim
 ----
 
