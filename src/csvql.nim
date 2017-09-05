@@ -2,11 +2,9 @@ import db_sqlite
 import strutils
 import sequtils
 import streams
-import tables
 import typetraits
 import parsecsv
 import docopt
-import strutils
 import tables
 import os
 import parseopt2
