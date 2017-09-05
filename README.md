@@ -1,8 +1,9 @@
-* csvql - nim
-------
+# csvql - nim
+----
+
 Query over CSV with simple AnsiSQL.
 
-Example:
+Examples:
 ---
 
 ```bash
@@ -21,3 +22,21 @@ Token,weekDayHour,state,low,medium,peak,peakHigh,Fire,ModelID
 151d39,102,0,0.25,0.25,0.25,0.2,0.05,2017-08-27MODULE_A
 151d39,102,1,0.25,0.25,0.25,0.2,0.05,2017-08-27MODULE_A
 ```
+
+```bash
+./csvql -sql="SELECT avg(weekDayHour) FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv' LIMIT 10" -H
+```
+```csv
+avg(weekDayHour)
+411.5
+```
+```bash
+./csvql -sql="SELECT count(*) FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv' LIMIT 10" -H
+```
+```csv
+count(*)
+168672
+```
+
+
+
