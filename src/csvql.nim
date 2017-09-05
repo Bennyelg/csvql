@@ -13,7 +13,7 @@ import parseopt2
 import nre
 import strscans
 
-proc parseTypes(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
+proc parseTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
     var metaFileType = initOrderedTable[string, string]()
     var header: seq[string]
     header = @[]
@@ -38,7 +38,7 @@ proc parseTypes(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTab
         metaFileType[header[ind]] = "text"
     return metaFileType
 
-proc generateCreateStatement(metaFileData: OrderedTable): string =
+proc generateCreateStatement*(metaFileData: OrderedTable): string =
     var createStatement = """
         CREATE TABLE tmpTable(
     """
@@ -47,14 +47,14 @@ proc generateCreateStatement(metaFileData: OrderedTable): string =
     createStatement = createStatement[0..createStatement.len-3] & ");"
     return createStatement
 
-proc createTable(db: DbConn, createStatment: string): bool =
+proc createTable*(db: DbConn, createStatment: string): bool =
     try:
         db.exec(SqlQuery(createStatment))
     except DbError as err:
         quit(err.msg)
     return true
 
-proc appendInsert(row: seq[string]): string =
+proc appendInsert*(row: seq[string]): string =
     var rowValues = "("
     for val in row:
         rowValues = rowValues & ", " & format("'$1'", val) & " "
@@ -74,7 +74,7 @@ proc writeHelp() =
 proc writeVersion() =
     echo("version 1.0")
 
-proc parseArguments(): Table[string, string] =
+proc parseArguments*(): Table[string, string] =
     var userArguments = initTable[string, string]()
     for kind, key, value in getopt():
         case kind
@@ -98,7 +98,7 @@ proc parseArguments(): Table[string, string] =
         quit()
     return userArguments
 
-proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, string] =
+proc processCSVData*(db: DbConn, args: var Table[string, string]): Table[string, string] =
     var p: CsvParser
     var x = nre.findAll(args["sql"], re"\'(.*)\'")
     var filePath = x[0].replace("'", "")
@@ -124,7 +124,7 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
             if args["query_header"] == "*":
                 var tmpKList: seq[string]
                 tmpKList = @[]
-                for key in typemapping.keys():
+                for key in typeMapping.keys():
                     tmpKList.add(key)
                 args["query_header"] = tmpKList.join(",")
             var statement = generateCreateStatement(typeMapping)
@@ -135,13 +135,14 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
     db.exec(SqlQuery(insertStatement))
     return args
 
-proc executeUserQuery(db: DbConn, userParsedArguments: Table[string, string]) =
+proc executeUserQuery*(db: DbConn, userParsedArguments: Table[string, string]) =
     var prettyHeader = ""
     prettyHeader = userParsedArguments["query_header"].strip().split(",").mapIt(string, it.strip()).join(",")
     echo(prettyHeader)
     # echo("=".repeat(prettyHeader.len))
     for r in db.fastRows(SqlQuery(userParsedArguments["sql"])):
         echo(r.join(","))
+    discard
 
 when isMainModule:
     let db = db_sqlite.open(":memory:", nil, nil, nil)
