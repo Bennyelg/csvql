@@ -1,4 +1,10 @@
-* csvql - nim *
+* csvql - nim
+------
+Query over CSV with simple AnsiSQL.
+
+Example:
+---
+
 ```bash
 ./csvql -sql="SELECT * FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv' LIMIT 10" -H
 ```
