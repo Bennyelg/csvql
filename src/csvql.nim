@@ -54,13 +54,13 @@ proc createTable(db: DbConn, createStatment: string): bool =
         quit(err.msg)
     return true
 
-proc insertRow(db: DbConn, row: seq[string]) =
-    var sqlStatement = "INSERT INTO tmpTable VALUES("
+proc appendInsert(row: seq[string]): string =
+    var rowValues = "("
     for val in row:
-        sqlStatement = sqlStatement & ", " & format("'$1'", val) & " "
-    sqlStatement = sqlStatement & ");"
-    sqlStatement = sqlStatement.replace("(,", "(")
-    db.exec(SqlQuery(sqlStatement))
+        rowValues = rowValues & ", " & format("'$1'", val) & " "
+    rowValues = rowValues & ")"
+    rowValues = rowValues.replace("(,", "(")
+    return rowValues
 
 proc writeHelp() =
     echo("""Usage csvql:
@@ -103,6 +103,7 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
     var x = nre.findAll(args["sql"], re"\'(.*)\'")
     var filePath = x[0].replace("'", "")
     var deli = ","
+    var valuesHolder: seq[string] = @[]
     var header: seq[string]
     args["sql"] = args["sql"].replace(x[0], "tmpTable")
     var s = newFileStream(filePath, fmRead)
@@ -128,8 +129,10 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
                 args["query_header"] = tmpKList.join(",")
             var statement = generateCreateStatement(typeMapping)
             discard createTable(db, statement)
-        insertRow(db, p.row)
+        valuesHolder.add(appendInsert(p.row))
         i.inc
+    var insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
+    db.exec(SqlQuery(insertStatement))
     return args
 
 proc executeUserQuery(db: DbConn, userParsedArguments: Table[string, string]) =
