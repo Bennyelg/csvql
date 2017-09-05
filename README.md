@@ -1,6 +1,8 @@
 * csvql - nim *
-```nim
+```bash
 ./csvql -sql="SELECT * FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv' LIMIT 10" -H
+```
+```csv
 Token,weekDayHour,state,low,medium,peak,peakHigh,Fire,ModelID
 151d39,100,0,0.25,0.25,0.25,0.2,0.05,2017-08-27MODULE_A
 151d39,100,1,0.25,0.25,0.25,0.2,0.05,2017-08-27MODULE_A
