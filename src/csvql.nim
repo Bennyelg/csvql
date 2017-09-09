@@ -4,17 +4,15 @@ import sequtils
 import streams
 import typetraits
 import parsecsv
-import docopt
 import tables
 import os
 import parseopt2
-import nre
+from nre import findAll, re
 import strscans
 
-proc parseTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
+proc parseCSVTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
     var metaFileType = initOrderedTable[string, string]()
-    var header: seq[string]
-    header = @[]
+    var header: seq[string] = @[]
     if optionalHeader.len == 0:
        for x in countup(0, row.len):
            header.add(format("c_0$1", x))
@@ -53,10 +51,10 @@ proc createTable*(db: DbConn, createStatment: string): bool =
     return true
 
 proc appendInsert*(row: seq[string]): string =
-    var rowValues = "("
+    var rowValues = ""
     for val in row:
         rowValues = rowValues & ", " & format("'$1'", val) & " "
-    rowValues = rowValues & ")"
+    rowValues = "(" & rowValues & ")"
     rowValues = rowValues.replace("(,", "(")
     return rowValues
 
@@ -68,6 +66,12 @@ proc writeHelp() =
             e.g execution:
                 -sql="SELECT * FROM '/path/to/file.csv' .." -H
     """)
+
+proc fetchQueryHeader(sqlStatement: string, headerColumns: seq[string]): string =
+    var selectColumns = nre.findAll(sqlStatement, re"(?<=SELECT)(.*)(?=FROM)")[0].strip().split(",")
+    if selectColumns.len == 1 and selectColumns[0] == "*":
+        return headerColumns.join(",")
+    return selectColumns.join(",")
 
 proc writeVersion() =
     echo("version 1.0")
@@ -97,34 +101,31 @@ proc parseArguments*(): Table[string, string] =
     return userArguments
 
 proc processCSVData*(db: DbConn, args: var Table[string, string]): Table[string, string] =
-    var p: CsvParser
-    var x = nre.findAll(args["sql"], re"\'(.*)\'")
-    var filePath = x[0].replace("'", "")
-    var deli = ","
-    var valuesHolder: seq[string] = @[]
-    var header: seq[string]
+    var 
+        i = 0
+        p: CsvParser
+        x = nre.findAll(args["sql"], re"\'(.*)\'")
+        filePath = x[0].replace("'", "")
+        deli = ","
+        valuesHolder: seq[string] = @[]
+        csvHeader: seq[string]
     args["sql"] = args["sql"].replace(x[0], "tmpTable")
     var s = newFileStream(filePath, fmRead)
     if s == nil:
         quit("file not found.")
-    p.open(s, filePath)
-    args["query_header"] = nre.findAll(args["sql"], re"(?<=SELECT)(.*)(?=FROM)")[0].strip()
 
+    p.open(s, filePath)
+    
     if args.hasKey("header"):
         p.readHeaderRow()
-        if args.hasKey("delimiter"):
-            deli = args["delimiter"]
-        header = p.headers
-    var i = 0
+        csvHeader = p.headers
+    if args.hasKey("delimiter"):
+        deli = args["delimiter"]
+
     while p.readRow():
         if i == 0:
-            var typeMapping = parseTypes(p.row, header)
-            if args["query_header"] == "*":
-                var tmpKList: seq[string]
-                tmpKList = @[]
-                for key in typeMapping.keys():
-                    tmpKList.add(key)
-                args["query_header"] = tmpKList.join(",")
+            var typeMapping = parseCSVTypes(p.row, csvHeader)
+            args["query_header"] = fetchQueryHeader(args["sql"], toSeq(typeMapping.keys()))
             var statement = generateCreateStatement(typeMapping)
             discard createTable(db, statement)
         valuesHolder.add(appendInsert(p.row))
@@ -137,7 +138,6 @@ proc executeUserQuery*(db: DbConn, userParsedArguments: Table[string, string]) =
     var prettyHeader = ""
     prettyHeader = userParsedArguments["query_header"].strip().split(",").mapIt(string, it.strip()).join(",")
     echo(prettyHeader)
-    # echo("=".repeat(prettyHeader.len))
     for r in db.fastRows(SqlQuery(userParsedArguments["sql"])):
         echo(r.join(","))
     discard
@@ -147,6 +147,3 @@ when isMainModule:
     var args = parseArguments()
     var readyArguments = processCSVData(db, args)
     executeUserQuery(db, readyArguments)
-
-
-
