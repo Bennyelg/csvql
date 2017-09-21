@@ -1,14 +1,8 @@
-import db_sqlite
-import strutils
-import sequtils
-import streams
-import typetraits
-import parsecsv
-import tables
-import os
-import parseopt2
 from nre import findAll, re
-import strscans
+import db_sqlite, strutils, strscans,
+       sequtils, streams, typetraits,
+       parsecsv, tables, os, parseopt2
+       
 
 proc parseCSVTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
     var metaFileType = initOrderedTable[string, string]()
@@ -43,14 +37,13 @@ proc generateCreateStatement*(metaFileData: OrderedTable): string =
     createStatement = createStatement[0..createStatement.len-3] & ");"
     return createStatement
 
-proc createTable*(db: DbConn, createStatment: string): bool =
+proc createTable(db: DbConn, createStatment: string) =
     try:
         db.exec(SqlQuery(createStatment))
     except DbError as err:
         quit(err.msg)
-    return true
 
-proc appendInsert*(row: seq[string]): string =
+proc insertStatement*(row: seq[string]): string =
     var rowValues = ""
     for val in row:
         rowValues = rowValues & ", " & format("'$1'", val) & " "
@@ -74,9 +67,9 @@ proc fetchQueryHeader(sqlStatement: string, headerColumns: seq[string]): string 
     return selectColumns.join(",")
 
 proc writeVersion() =
-    echo("version 1.0")
+    echo("Version 1.0")
 
-proc parseArguments*(): Table[string, string] =
+proc parseArguments(): Table[string, string] =
     var userArguments = initTable[string, string]()
     for kind, key, value in getopt():
         case kind
@@ -100,47 +93,48 @@ proc parseArguments*(): Table[string, string] =
         quit()
     return userArguments
 
-proc processCSVData*(db: DbConn, args: var Table[string, string]): Table[string, string] =
+proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, string] =
     var 
         i = 0
-        p: CsvParser
-        x = nre.findAll(args["sql"], re"\'(.*)\'")
-        filePath = x[0].replace("'", "")
-        deli = ","
+        parser: CsvParser
+        fullPath = nre.findAll(args["sql"], re"\'(.*)\'")
+        filePath = fullPath[0].replace("'", "")
+        deli = ','
         valuesHolder: seq[string] = @[]
         csvHeader: seq[string]
-    args["sql"] = args["sql"].replace(x[0], "tmpTable")
-    var s = newFileStream(filePath, fmRead)
-    if s == nil:
+    args["sql"] = args["sql"].replace(fullPath[0], "tmpTable")
+    var fileStream = newFileStream(filePath, fmRead)
+    
+    if fileStream == nil:
         quit("file not found.")
 
-    p.open(s, filePath)
+    if args.hasKey("delimiter"):
+        deli = args["delimiter"][0]
+
+    parser.open(fileStream, filePath, deli)
     
     if args.hasKey("header"):
-        p.readHeaderRow()
-        csvHeader = p.headers
-    if args.hasKey("delimiter"):
-        deli = args["delimiter"]
+        parser.readHeaderRow()
+        csvHeader = parser.headers
 
-    while p.readRow():
+
+    while parser.readRow():
         if i == 0:
-            var typeMapping = parseCSVTypes(p.row, csvHeader)
+            var typeMapping = parseCSVTypes(parser.row, csvHeader)
             args["query_header"] = fetchQueryHeader(args["sql"], toSeq(typeMapping.keys()))
-            var statement = generateCreateStatement(typeMapping)
-            discard createTable(db, statement)
-        valuesHolder.add(appendInsert(p.row))
+            let statement = generateCreateStatement(typeMapping)
+            createTable(db, statement)
+        valuesHolder.add(insertStatement(parser.row))
         i.inc
-    var insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
+    let insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
     db.exec(SqlQuery(insertStatement))
     return args
 
-proc executeUserQuery*(db: DbConn, userParsedArguments: Table[string, string]) =
-    var prettyHeader = ""
-    prettyHeader = userParsedArguments["query_header"].strip().split(",").mapIt(string, it.strip()).join(",")
+proc executeUserQuery(db: DbConn, userParsedArguments: Table[string, string]) =
+    var prettyHeader = userParsedArguments["query_header"].strip().split(",").mapIt(string, it.strip()).join(",")
     echo(prettyHeader)
     for r in db.fastRows(SqlQuery(userParsedArguments["sql"])):
         echo(r.join(","))
-    discard
 
 when isMainModule:
     let db = db_sqlite.open(":memory:", nil, nil, nil)

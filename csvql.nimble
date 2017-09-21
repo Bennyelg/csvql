@@ -1,9 +1,9 @@
 # Package
 version     = "1.0"
 author      = "Benny Elgazar"
-description = "csvql."
+description = "csvql - query csv using ansisql."
 license     = "MIT"
 
-srcDir = @["src"]
+srcDir = "src"
 
-requires "nim >= 0.17.0"
+requires "nim >= 0.17.2"

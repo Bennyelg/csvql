@@ -1,5 +1,7 @@
-![alt tag](https://github.com/Bennyelg/csvql/blob/master/logo.png)
-# csvql - nim
+<p align="center">
+  <img width="460" height="300" src="https://github.com/Bennyelg/csvql/blob/master/logo.png">
+</p>
+# CSVql - Nim.
 ----
 
 Query over CSV with simple AnsiSQL.
