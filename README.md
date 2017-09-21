@@ -1,6 +1,7 @@
 <p align="center">
-  <img width="460" height="300" src="https://github.com/Bennyelg/csvql/blob/master/logo.png">
+  <img width="460" height="200" src="https://github.com/Bennyelg/csvql/blob/master/logo.png">
 </p>
+
 # CSVql - Nim.
 ----
 
