@@ -1,8 +1,10 @@
 from nre import findAll, re
 import db_sqlite, strutils, strscans,
        sequtils, streams, typetraits,
-       parsecsv, tables, os, parseopt2
+       parsecsv, tables, os, parseopt2,
+       times
        
+const InsertChunkSize = 20_000
 
 proc parseCSVTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
     var metaFileType = initOrderedTable[string, string]()
@@ -93,6 +95,18 @@ proc parseArguments(): Table[string, string] =
         quit()
     return userArguments
 
+proc analyzeLimit(statement: string): int =
+    result = -1
+    let limitClause = statement.toLowerAscii().contains("limit")
+    let whereClause = statement.toLowerAscii().contains("where")
+    try:
+        # If we have a where clause we cannot take the limit before, so we have to ignore.
+        if limitClause and not whereClause:
+            result = statement.toLowerAscii().split("limit")[1].strip().parseInt()
+    except ValueError:
+        discard
+    return result
+
 proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, string] =
     var 
         i = 0
@@ -102,7 +116,9 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
         deli = ','
         valuesHolder: seq[string] = @[]
         csvHeader: seq[string]
+        currentPosition = 0
     args["sql"] = args["sql"].replace(fullPath[0], "tmpTable")
+    let limit = analyzeLimit(args["sql"])
     var fileStream = newFileStream(filePath, fmRead)
     
     if fileStream == nil:
@@ -126,6 +142,15 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
             createTable(db, statement)
         valuesHolder.add(insertStatement(parser.row))
         i.inc
+        currentPosition.inc
+        if i == limit and limit != -1:
+            break
+        if InsertChunkSize == currentPosition:
+            let insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
+            db.exec(SqlQuery(insertStatement))
+            currentPosition = 0
+            valuesHolder = @[]
+    # Dumping the rest.
     let insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
     db.exec(SqlQuery(insertStatement))
     return args
@@ -135,9 +160,18 @@ proc executeUserQuery(db: DbConn, userParsedArguments: Table[string, string]) =
     echo(prettyHeader)
     for r in db.fastRows(SqlQuery(userParsedArguments["sql"])):
         echo(r.join(","))
+    discard
 
 when isMainModule:
     let db = db_sqlite.open(":memory:", nil, nil, nil)
     var args = parseArguments()
+    var startTime = cpuTime()
     var readyArguments = processCSVData(db, args)
+    var endTime = cpuTime()
+    echo("# Statistics: =>")
+    echo("# Total time spending inserting rows: ", (endTime - startTime))
     executeUserQuery(db, readyArguments)
+    var executionEndTime = cpuTime()
+    echo("# Total query execution spending time: ", (executionEndTime - endTime))
+
+    
