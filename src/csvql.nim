@@ -99,9 +99,10 @@ proc analyzeLimit(statement: string): int =
     result = -1
     let limitClause = statement.toLowerAscii().contains("limit")
     let whereClause = statement.toLowerAscii().contains("where")
+    let aggFunctions = statement.toLowerAscii().contains("group by")
     try:
         # If we have a where clause we cannot take the limit before, so we have to ignore.
-        if limitClause and not whereClause:
+        if limitClause and not whereClause and not aggFunctions:
             result = statement.toLowerAscii().split("limit")[1].strip().parseInt()
     except ValueError:
         discard
