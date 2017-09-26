@@ -35,12 +35,17 @@ avg(weekDayHour)
 411.5
 ```
 ```bash
-./csvql -sql="SELECT count(*) FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv' LIMIT 10" -H
+./csvql -sql="SELECT count(*) FROM '/Users/benny/Downloads/Tel_Aviv_Benny_Net_Actions.csv'" -H
 ```
 ```csv
 count(*)
 168672
 ```
+
+Performance:
+---
+
+CSV File with 1.7m Rows takes to be loaded & queried with e.g COUNT(*) witin ~25 seconds.
 
 
 

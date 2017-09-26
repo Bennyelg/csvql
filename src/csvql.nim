@@ -16,18 +16,18 @@ proc parseCSVTypes*(row: seq[string], optionalHeader: seq[string] = @[]): Ordere
         header = optionalHeader 
     for ind, el in row:
         try:
-            var t = el.parseInt()
-            metaFileType[header[ind]] = t.type.name
+            var _ = el.parseInt()
+            metaFileType[header[ind]] = "INT"
             continue
         except ValueError:
             discard
         try:
-            var t = el.parseFloat()
-            metaFileType[header[ind]] = t.type.name
+            var _ = el.parseFloat()
+            metaFileType[header[ind]] = "REAL"
             continue
         except ValueError:
             discard
-        metaFileType[header[ind]] = "text"
+        metaFileType[header[ind]] = "TEXT"
     return metaFileType
 
 proc generateCreateStatement*(metaFileData: OrderedTable): string =
@@ -133,7 +133,8 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
     if args.hasKey("header"):
         parser.readHeaderRow()
         csvHeader = parser.headers
-
+    
+    defer: parser.close()
 
     while parser.readRow():
         if i == 0:
