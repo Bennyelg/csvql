@@ -3,8 +3,10 @@ import db_sqlite, strutils, strscans,
        sequtils, streams, typetraits,
        parsecsv, tables, os, parseopt2,
        times
-       
-const InsertChunkSize = 20_000
+
+# By the documntation of SQLite:
+# `` SQLite will easily do 50,000 or more  INSERT statements per second on an average desktop computer..``
+const InsertChunkSize = 10_000
 
 proc parseCSVTypes*(row: seq[string], optionalHeader: seq[string] = @[]): OrderedTable[string, string] =
     var metaFileType = initOrderedTable[string, string]()
@@ -101,7 +103,6 @@ proc analyzeLimit(statement: string): int =
     let whereClause = statement.toLowerAscii().contains("where")
     let aggFunctions = statement.toLowerAscii().contains("group by")
     try:
-        # If we have a where clause we cannot take the limit before, so we have to ignore.
         if limitClause and not whereClause and not aggFunctions:
             result = statement.toLowerAscii().split("limit")[1].strip().parseInt()
     except ValueError:
@@ -135,7 +136,8 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
         csvHeader = parser.headers
     
     defer: parser.close()
-
+    db.exec(sql"PRAGMA synchronous=OFF")
+    db.exec(sql"BEGIN TRANSACTION;")
     while parser.readRow():
         if i == 0:
             var typeMapping = parseCSVTypes(parser.row, csvHeader)
@@ -155,6 +157,7 @@ proc processCSVData(db: DbConn, args: var Table[string, string]): Table[string, 
     # Dumping the rest.
     let insertStatement = "INSERT INTO tmpTable VALUES " & valuesHolder.join(",")
     db.exec(SqlQuery(insertStatement))
+    db.exec(sql"commit;")
     return args
 
 proc executeUserQuery(db: DbConn, userParsedArguments: Table[string, string]) =
@@ -169,11 +172,8 @@ when isMainModule:
     var args = parseArguments()
     var startTime = cpuTime()
     var readyArguments = processCSVData(db, args)
-    var endTime = cpuTime()
-    echo("# Statistics: =>")
-    echo("# Total time spending inserting rows: ", (endTime - startTime))
     executeUserQuery(db, readyArguments)
-    var executionEndTime = cpuTime()
-    echo("# Total query execution spending time: ", (executionEndTime - endTime))
+    var endTime = cpuTime()
+    echo("[*] Total Time of execution: ", (endTime - startTime), " seconds")
 
     
