@@ -11,7 +11,8 @@ import
   locks,
   algorithm,
   cligen,
-  terminal
+  terminal,
+  tables
 
 type
   Csv = ref object
@@ -20,6 +21,7 @@ type
     hasHeader:  bool
     columns:    seq[string]
     types:      seq[string]
+    delimiter:  char
 
   Database = object
     connection: DbConn
@@ -34,13 +36,55 @@ template guessType(s: string, t: untyped): bool =
     discard
   result
   
+proc guessCsvDelimiter(filePath: string): char =
+  const maxSampleCountOfRows = 10
+  const possibleDelimiters = @[";", ",", ":", "~", "*", "$", "#", "@", "/", "%", "^"]
+  var fs = newFileStream(filePath, fmRead)
+  var line = ""
+  var rowNO = 0
+  var results: seq[tuple[rowNo: int, deli: string, count: int]] = @[]
+  while fs.readLine(line):
+    if rowNO < maxSampleCountOfRows:
+      for delimiter in possibleDelimiters:
+        results.add((rowNO, delimiter, line.split(delimiter).len))
+      inc rowNO
+    else:
+      break
+  var highestCount = 0
+  var mostPossibleDelimiter: seq[char] = @[]
+  for delimiter in possibleDelimiters:
+    let resultSetForTheCurrentDelimiter = results.filterIt(it.deli == delimiter)
+    for row in resultSetForTheCurrentDelimiter:
+      highestCount = max(results.mapIt(it.count))
+    
+    for row in resultSetForTheCurrentDelimiter:
+      if row.count == highestCount:
+        mostPossibleDelimiter.add(row.deli)
+  
+  var mostPossibleDelimiterClean = deduplicate(mostPossibleDelimiter)
+  if mostPossibleDelimiterClean.len == 1:
+    return mostPossibleDelimiter[0]
+  elif mostPossibleDelimiterClean.len > 1:
+    var highestCntDelimiter = 0
+    var highestPossibleDelimiterPosition = 0
+    for idx, d in mostPossibleDelimiterClean:
+      var countOfPossibleDelimiter = count(mostPossibleDelimiterClean, d)
+      if highestCntDelimiter < countOfPossibleDelimiter:
+        highestCntDelimiter = countOfPossibleDelimiter
+        highestPossibleDelimiterPosition = idx
+    return  mostPossibleDelimiterClean[highestPossibleDelimiterPosition]
+  else:
+    return ','
+  
 
 proc appendCsv* (path, alias: string, hasHeader: bool = false): Csv  =
   ## return a new Csv object.
+  
   Csv(
     path: path,
     alias: alias,
-    hasHeader: hasHeader
+    hasHeader: hasHeader,
+    delimiter: guessCsvDelimiter(path)  # the default until we find otherwise.
   )
 
 proc getTypesWithMostProbability(types: seq[seq[string]]): seq[string] =
@@ -70,12 +114,13 @@ proc figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
   let csvTypes = getTypesWithMostProbability(types)
   return csvTypes
 
+
 proc parseCsv* (csv: Csv) =
   const numOfSamplingRows = 50
   var csvStream = newFileStream(csv.path, fmRead)
   var parser: CsvParser
   var rowsSampleCount: seq[seq[string]]
-  parser.open(csvStream, csv.path, ',')
+  parser.open(csvStream, csv.path, csv.delimiter)
   
   if csv.hasHeader:
     parser.readHeaderRow()
@@ -145,7 +190,7 @@ proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
   var rowsChunk: seq[seq[string]] = @[]
   var csvStream = newFileStream(csv.path, fmRead)
   var parser: CsvParser
-  parser.open(csvStream, csv.path,',')
+  parser.open(csvStream, csv.path, csv.delimiter)
   if csv.hasHeader:
     parser.readHeaderRow()
   while parser.readRow():
