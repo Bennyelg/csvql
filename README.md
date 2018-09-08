@@ -12,5 +12,7 @@ Query over CSV with simple AnsiSQL.
 </p>
 
 
-
+# TODOs:
+1. tests.
+2. simple documentation with more examples and limitations.
 
