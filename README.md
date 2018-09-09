@@ -22,9 +22,9 @@
 
 Query over CSV with simple AnsiSQL.
 
-<p align="center">
-  <img width="1800" height="800" src="https://github.com/Bennyelg/csvql/blob/master/csvql_2_0.png">
-</p>
+<kbd>
+  <img src="https://cdn.rawgit.com/Bennyelg/csvql/1fc02835/demo.svg">
+</kbd>
 
 
 # TODOs:
