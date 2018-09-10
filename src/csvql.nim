@@ -11,8 +11,8 @@ import
   locks,
   algorithm,
   cligen,
-  terminal,
-  tables
+  terminal
+
 
 type
   Csv = ref object
@@ -38,7 +38,7 @@ template guessType(s: string, t: untyped): bool =
   
 proc guessCsvDelimiter(filePath: string): char =
   const maxSampleCountOfRows = 10
-  const possibleDelimiters = @[";", ",", ":", "~", "*", "$", "#", "@", "/", "%", "^"]
+  const possibleDelimiters = @[";", ",", ":", "~", "*", "$", "#", "@", "/", "%", "^", "\t"]
   var fs = newFileStream(filePath, fmRead)
   var line = ""
   var rowNO = 0
