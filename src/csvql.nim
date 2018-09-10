@@ -248,7 +248,17 @@ proc getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
   return lengths
 
 
-proc displayResults(db: Database, csvs: seq[Csv], query: string) =
+proc exportResults(columns: seq[string], resultSet: seq[seq[string]]): string =
+  let dt = format(now(), "yyyy-mm-ddHH:mm:ss").replace("-","_").replace(":", "_")
+  var fs = newFileStream("/tmp/" & dt & ".csv", fmWrite)
+  for idx, row in resultSet:
+    if idx == 0:
+      fs.writeLine(columns.join(","))
+    fs.writeLine(row.join(","))
+  
+  return "/tmp/" & dt & ".csv"
+
+proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: bool = false) =
   var queryColumns = getQueryColumns(csvs, query)
   var rows: seq[tuple[r: Row, length: int]] = @[]  
   for row in db.connection.fastRows(SqlQuery(query)):
@@ -277,7 +287,16 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string) =
   for row in fin:
     echo("|" & row.join("|") & " |")
     echo(row.join("|").len * "-")
-
+  
+  if exportResult:
+    let exportResultHeader = """
+----------
+::Export::
+----------
+"""
+    styledWriteLine(stdout, fgRed, exportResultHeader, resetStyle)
+    let generatedCsvPath = exportResults(queryColumns, rows.mapIt(it.r))
+    styledWriteLine(stdout, fgGreen, "File is ready & can be located in: " & generatedCsvPath, resetStyle)
 
 
 proc parseQuery(query: string): (seq[Csv], string) =
@@ -297,7 +316,7 @@ proc parseQuery(query: string): (seq[Csv], string) =
     newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}").replace("'", "")
   return (csvs, newQuery)
 
-proc csvQL(query: string) =
+proc csvQL(query: string, exportResult: bool = false) =
   let startTime = cpuTime()
   let db = openConnection()
   let (csvs, adjustedQuery) = parseQuery(query)
@@ -317,7 +336,7 @@ proc csvQL(query: string) =
 ::Result::
 ----------"""
   styledWriteLine(stdout, fgRed, queryResultHeader, resetStyle)
-  displayResults(db, csvs, adjustedQuery)
+  displayResults(db, csvs, adjustedQuery, exportResult)
   styledWriteLine(stdout, fgYellow, fmt"* Total Duration: {cpuTime() - startTime} seconds.", resetStyle)
 
 when isMainModule:
@@ -326,6 +345,6 @@ when isMainModule:
 i.e:
 1) SELECT name, day, hour FROM '/path/to/csv/test.csv' as t1 LIMIT 10 
 2) SELECT name, lastname, birthday FROM '/path/to/csv/test.csv' as t1 LEFT JOIN '/path/to/csv/test2.csv' as t2 ON t1.name = t2.name
-""" })
+""", "exportResult": "set to true if you want to export the result set." })
 
 
