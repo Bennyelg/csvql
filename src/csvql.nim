@@ -76,7 +76,6 @@ proc guessCsvDelimiter(filePath: string): char =
   else:
     return ','
   
-
 proc appendCsv* (path, alias: string, hasHeader: bool = false): Csv  =
   ## return a new Csv object.
   
@@ -114,7 +113,6 @@ proc figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
   let csvTypes = getTypesWithMostProbability(types)
   return csvTypes
 
-
 proc parseCsv* (csv: Csv) =
   const numOfSamplingRows = 50
   var csvStream = newFileStream(csv.path, fmRead)
@@ -150,7 +148,6 @@ proc parseCsv* (csv: Csv) =
   
   csv.types = figureColumnsTypes(rowsSampleCount)
 
-
 proc openConnection* (): Database =
   Database(
     connection:  open(":memory:", nil, nil, nil)
@@ -168,7 +165,6 @@ proc createTableUsingCsvProperties(db: Database, csv: Csv) =
   """
   db.connection.exec(SqlQuery(statement))
 
-
 proc executeChunk(args: tuple[db: Database, tableName: string, columns: seq[string], rows: seq[seq[string]]]) =
   var statement = fmt"""
     INSERT INTO {args.tableName}({args.columns.join(",")}) 
@@ -180,7 +176,6 @@ proc executeChunk(args: tuple[db: Database, tableName: string, columns: seq[stri
     insertableRows.add(insertableRow)
   let executableStatement = statement & insertableRows.join(",") & ";"  
   discard args.db.connection.tryExec(SqlQuery(executableStatement))
-
 
 proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
   db.connection.exec(sql"PRAGMA synchronous=OFF")
@@ -202,7 +197,6 @@ proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
     executeChunk((db: db, tableName: csv.alias, columns: csv.columns, rows: rowsChunk))
 
   db.connection.exec(sql"COMMIT;") 
-
 
 proc `*`(size: int, del: string): string =
   result = "+" 
@@ -246,7 +240,6 @@ proc getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
       if word.len > lengths[idx]:
         lengths[idx] = word.len
   return lengths
-
 
 proc exportResults(columns: seq[string], resultSet: seq[seq[string]]): string =
   let dt = format(now(), "yyyy-mm-ddHH:mm:ss").replace("-","_").replace(":", "_")
@@ -298,7 +291,6 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: b
     styledWriteLine(stdout, fgRed, exportResultHeader, resetStyle)
     let generatedCsvPath = exportResults(queryColumns, rows.mapIt(it.r))
     styledWriteLine(stdout, fgGreen, "File is ready & can be located in: " & generatedCsvPath, resetStyle)
-
 
 proc parseQuery(query: string): (seq[Csv], string) =
   let csvsPaths = re.findAll(query, re"'(.*?)'")
