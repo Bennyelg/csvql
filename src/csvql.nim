@@ -250,13 +250,14 @@ proc getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
 
 proc exportResults(columns: seq[string], resultSet: seq[seq[string]]): string =
   let dt = format(now(), "yyyy-mm-ddHH:mm:ss").replace("-","_").replace(":", "_")
-  var fs = newFileStream(getTempDir() & dt & ".csv", fmWrite)
+  let generatedFilePath = getTempDir() & dt & ".csv"
+  var fs = newFileStream(generatedFilePath, fmWrite)
   for idx, row in resultSet:
     if idx == 0:
       fs.writeLine(columns.join(","))
     fs.writeLine(row.join(","))
   
-  return "/tmp/" & dt & ".csv"
+  return generatedFilePath
 
 proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: bool = false) =
   var queryColumns = getQueryColumns(csvs, query)
