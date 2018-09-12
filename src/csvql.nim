@@ -76,7 +76,6 @@ proc guessCsvDelimiter(filePath: string): char =
   else:
     return ','
   
-
 proc appendCsv* (path, alias: string, hasHeader: bool = false): Csv  =
   ## return a new Csv object.
   
@@ -114,7 +113,6 @@ proc figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
   let csvTypes = getTypesWithMostProbability(types)
   return csvTypes
 
-
 proc parseCsv* (csv: Csv) =
   const numOfSamplingRows = 50
   var csvStream = newFileStream(csv.path, fmRead)
@@ -150,7 +148,6 @@ proc parseCsv* (csv: Csv) =
   
   csv.types = figureColumnsTypes(rowsSampleCount)
 
-
 proc openConnection* (): Database =
   Database(
     connection:  open(":memory:", nil, nil, nil)
@@ -168,7 +165,6 @@ proc createTableUsingCsvProperties(db: Database, csv: Csv) =
   """
   db.connection.exec(SqlQuery(statement))
 
-
 proc executeChunk(args: tuple[db: Database, tableName: string, columns: seq[string], rows: seq[seq[string]]]) =
   var statement = fmt"""
     INSERT INTO {args.tableName}({args.columns.join(",")}) 
@@ -180,7 +176,6 @@ proc executeChunk(args: tuple[db: Database, tableName: string, columns: seq[stri
     insertableRows.add(insertableRow)
   let executableStatement = statement & insertableRows.join(",") & ";"  
   discard args.db.connection.tryExec(SqlQuery(executableStatement))
-
 
 proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
   db.connection.exec(sql"PRAGMA synchronous=OFF")
@@ -202,7 +197,6 @@ proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
     executeChunk((db: db, tableName: csv.alias, columns: csv.columns, rows: rowsChunk))
 
   db.connection.exec(sql"COMMIT;") 
-
 
 proc `*`(size: int, del: string): string =
   result = "+" 
@@ -247,8 +241,18 @@ proc getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
         lengths[idx] = word.len
   return lengths
 
+proc exportResults(columns: seq[string], resultSet: seq[seq[string]]): string =
+  let dt = format(now(), "yyyy-mm-ddHH:mm:ss").replace("-","_").replace(":", "_")
+  let generatedFilePath = getTempDir() & dt & ".csv"
+  var fs = newFileStream(generatedFilePath, fmWrite)
+  for idx, row in resultSet:
+    if idx == 0:
+      fs.writeLine(columns.join(","))
+    fs.writeLine(row.join(","))
+  
+  return generatedFilePath
 
-proc displayResults(db: Database, csvs: seq[Csv], query: string) =
+proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: bool = false) =
   var queryColumns = getQueryColumns(csvs, query)
   var rows: seq[tuple[r: Row, length: int]] = @[]  
   for row in db.connection.fastRows(SqlQuery(query)):
@@ -277,11 +281,19 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string) =
   for row in fin:
     echo("|" & row.join("|") & " |")
     echo(row.join("|").len * "-")
-
-
+  
+  if exportResult:
+    let exportResultHeader = """
+----------
+::Export::
+----------
+"""
+    styledWriteLine(stdout, fgRed, exportResultHeader, resetStyle)
+    let generatedCsvPath = exportResults(queryColumns, rows.mapIt(it.r))
+    styledWriteLine(stdout, fgGreen, "File is ready & can be located in: " & generatedCsvPath, resetStyle)
 
 proc parseQuery(query: string): (seq[Csv], string) =
-  let csvsPaths = re.findAll(query, re"'(.*?)'")
+  let csvsPaths = re.findAll(query, re"'(.*?).csv'")
   var csvs = newSeqOfCap[Csv](csvsPaths.len)
   var newQuery = query
   let propertiesHeader ="""
@@ -294,10 +306,12 @@ proc parseQuery(query: string): (seq[Csv], string) =
     styledWriteLine(stdout, fgGreen, fmt"t{idx + 1} = {csvPath}", resetStyle)
     let csv = appendCsv(csvPath.replace("'", ""), fmt"t{idx + 1}", true)
     csvs.add(csv)
-    newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}").replace("'", "")
-  return (csvs, newQuery)
+    newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}")
+    
 
-proc csvQL(query: string) =
+  return (csvs, newQuery)
+  
+proc csvQL(query: string, exportResult: bool = false) =
   let startTime = cpuTime()
   let db = openConnection()
   let (csvs, adjustedQuery) = parseQuery(query)
@@ -317,7 +331,7 @@ proc csvQL(query: string) =
 ::Result::
 ----------"""
   styledWriteLine(stdout, fgRed, queryResultHeader, resetStyle)
-  displayResults(db, csvs, adjustedQuery)
+  displayResults(db, csvs, adjustedQuery, exportResult)
   styledWriteLine(stdout, fgYellow, fmt"* Total Duration: {cpuTime() - startTime} seconds.", resetStyle)
 
 when isMainModule:
@@ -326,6 +340,6 @@ when isMainModule:
 i.e:
 1) SELECT name, day, hour FROM '/path/to/csv/test.csv' as t1 LIMIT 10 
 2) SELECT name, lastname, birthday FROM '/path/to/csv/test.csv' as t1 LEFT JOIN '/path/to/csv/test2.csv' as t2 ON t1.name = t2.name
-""" })
+""", "exportResult": "set to true if you want to export the result set." })
 
 
