@@ -293,7 +293,8 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: b
     styledWriteLine(stdout, fgGreen, "File is ready & can be located in: " & generatedCsvPath, resetStyle)
 
 proc parseQuery(query: string): (seq[Csv], string) =
-  let csvsPaths = re.findAll(query, re"'(.*?)'")
+  let csvsPaths = re.findAll(query, re"'(.*?).csv'")
+  echo(csvsPaths)
   var csvs = newSeqOfCap[Csv](csvsPaths.len)
   var newQuery = query
   let propertiesHeader ="""
@@ -306,9 +307,11 @@ proc parseQuery(query: string): (seq[Csv], string) =
     styledWriteLine(stdout, fgGreen, fmt"t{idx + 1} = {csvPath}", resetStyle)
     let csv = appendCsv(csvPath.replace("'", ""), fmt"t{idx + 1}", true)
     csvs.add(csv)
-    newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}").replace("'", "")
-  return (csvs, newQuery)
+    newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}")
+    
 
+  return (csvs, newQuery)
+  
 proc csvQL(query: string, exportResult: bool = false) =
   let startTime = cpuTime()
   let db = openConnection()
