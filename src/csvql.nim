@@ -294,7 +294,6 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: b
 
 proc parseQuery(query: string): (seq[Csv], string) =
   let csvsPaths = re.findAll(query, re"'(.*?).csv'")
-  echo(csvsPaths)
   var csvs = newSeqOfCap[Csv](csvsPaths.len)
   var newQuery = query
   let propertiesHeader ="""
