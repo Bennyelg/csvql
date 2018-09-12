@@ -1,5 +1,5 @@
 # Package
-version     = "2.0.1"
+version     = "3.0.0"
 author      = "Benny Elgazar"
 description = "csvql - query csv using ansisql."
 license     = "MIT"
