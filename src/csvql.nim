@@ -150,7 +150,7 @@ proc parseCsv* (csv: Csv) =
 
 proc openConnection* (): Database =
   Database(
-    connection:  open(":memory:", nil, nil, nil)
+    connection:  open(":memory:", "", "", "")
   )
 
 proc createTableUsingCsvProperties(db: Database, csv: Csv) =
