@@ -1,15 +1,13 @@
-import 
-  os, 
-  parsecsv, 
-  streams, 
-  sequtils, 
-  strutils, 
+import
+  os,
+  parsecsv,
+  streams,
+  sequtils,
+  strutils,
   db_sqlite,
   strformat,
   re,
   times,
-  locks,
-  algorithm,
   cligen,
   terminal
 
@@ -27,7 +25,7 @@ type
     connection: DbConn
 
 
-template guessType(s: string, t: untyped): bool = 
+template guessType(s: string, t: untyped): bool =
   var result = false
   try:
     discard t(s)
@@ -35,10 +33,10 @@ template guessType(s: string, t: untyped): bool =
   except Exception:
     discard
   result
-  
+
 proc guessCsvDelimiter(filePath: string): char =
   const maxSampleCountOfRows = 10
-  const possibleDelimiters = @[";", ",", ":", "~", "*", "$", "#", "@", "/", "%", "^", "\t"]
+  const possibleDelimiters = [";", ",", ":", "~", "*", "$", "#", "@", "/", "%", "^", "\t"]
   var fs = newFileStream(filePath, fmRead)
   var line = ""
   var rowNO = 0
@@ -56,11 +54,11 @@ proc guessCsvDelimiter(filePath: string): char =
     let resultSetForTheCurrentDelimiter = results.filterIt(it.deli == delimiter)
     for row in resultSetForTheCurrentDelimiter:
       highestCount = max(results.mapIt(it.count))
-    
+
     for row in resultSetForTheCurrentDelimiter:
       if row.count == highestCount:
         mostPossibleDelimiter.add(row.deli)
-  
+
   var mostPossibleDelimiterClean = deduplicate(mostPossibleDelimiter)
   if mostPossibleDelimiterClean.len == 1:
     return mostPossibleDelimiter[0]
@@ -75,10 +73,9 @@ proc guessCsvDelimiter(filePath: string): char =
     return  mostPossibleDelimiterClean[highestPossibleDelimiterPosition]
   else:
     return ','
-  
-proc appendCsv* (path, alias: string, hasHeader: bool = false): Csv  =
+
+proc appendCsv*(path, alias: string, hasHeader: bool = false): Csv {.inline.} =
   ## return a new Csv object.
-  
   Csv(
     path: path,
     alias: alias,
@@ -86,7 +83,7 @@ proc appendCsv* (path, alias: string, hasHeader: bool = false): Csv  =
     delimiter: guessCsvDelimiter(path)  # the default until we find otherwise.
   )
 
-proc getTypesWithMostProbability(types: seq[seq[string]]): seq[string] =
+func getTypesWithMostProbability(types: seq[seq[string]]): seq[string] =
   var totalTimeIsThere = 0
   var pos = 0
   for idx, row in types:
@@ -97,7 +94,7 @@ proc getTypesWithMostProbability(types: seq[seq[string]]): seq[string] =
 
   types[pos]
 
-proc figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
+func figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
   var types: seq[seq[string]] = @[]
   for row in rowsSamples:
     var rowTypes: seq[string] = @[]
@@ -113,24 +110,19 @@ proc figureColumnsTypes(rowsSamples: seq[seq[string]]): seq[string] =
   let csvTypes = getTypesWithMostProbability(types)
   return csvTypes
 
-proc parseCsv* (csv: Csv) =
+proc parseCsv*(csv: Csv) =
   const numOfSamplingRows = 50
   var csvStream = newFileStream(csv.path, fmRead)
   var parser: CsvParser
   var rowsSampleCount: seq[seq[string]]
   parser.open(csvStream, csv.path, csv.delimiter)
-  
+
   if csv.hasHeader:
     parser.readHeaderRow()
     csv.columns = parser.headers.mapIt(
-      it.replace(" ", "_")
-        .replace("'","")
-        .replace(".", "")
-        .replace("(", "")
-        .replace(")", "")
-        .replace("%", "")
-        .replace("#", "no")
-        .toLowerAscii())
+      it.toLowerAscii.multiReplace(
+        [(" ", "_"), ("'",""), (".", ""), ("(", ""), (")", ""), ("%", ""), ("#", "no")]
+      ))
   var samplingCounter = 0
   while parser.readRow():
     let row = parser.row
@@ -139,25 +131,25 @@ proc parseCsv* (csv: Csv) =
       inc samplingCounter
     else:
       break
-  
+
   if not csv.hasHeader:
     var columns: seq[string] = @[]
     for idx in countup(1, rowsSampleCount[0].len):
       columns.add(fmt"c_{idx}")
     csv.columns = columns
-  
+
   csv.types = figureColumnsTypes(rowsSampleCount)
 
-proc openConnection* (): Database =
+template openConnection*(): Database =
   Database(
-    connection:  open(":memory:", "", "", "")
+    connection: open(":memory:", "", "", "")
   )
 
 proc createTableUsingCsvProperties(db: Database, csv: Csv) =
   var columnsWithTypes: seq[string] = @[]
   for idx, column in csv.columns:
     columnsWithTypes.add(fmt"{column} {csv.types[idx]}")
-  
+
   var statement = fmt"""
     CREATE TABLE {csv.alias} (
       {columnsWithTypes.join(",")}
@@ -167,14 +159,14 @@ proc createTableUsingCsvProperties(db: Database, csv: Csv) =
 
 proc executeChunk(args: tuple[db: Database, tableName: string, columns: seq[string], rows: seq[seq[string]]]) =
   var statement = fmt"""
-    INSERT INTO {args.tableName}({args.columns.join(",")}) 
+    INSERT INTO {args.tableName}({args.columns.join(",")})
     VALUES
     """
   var insertableRows: seq[string] = newSeqOfCap[string](args.rows.len)
   for row in args.rows:
     var insertableRow = "(" & row.mapIt("'" & it.replace("?", "").replace("'","") & "'").join(",") & ")"
     insertableRows.add(insertableRow)
-  let executableStatement = statement & insertableRows.join(",") & ";"  
+  let executableStatement = statement & insertableRows.join(",") & ";"
   discard args.db.connection.tryExec(SqlQuery(executableStatement))
 
 proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
@@ -196,24 +188,15 @@ proc insertCsvRowsIntoTable(db: Database, csv: Csv) =
   if rowsChunk.len > 0:
     executeChunk((db: db, tableName: csv.alias, columns: csv.columns, rows: rowsChunk))
 
-  db.connection.exec(sql"COMMIT;") 
+  db.connection.exec(sql"COMMIT;")
 
-proc `*`(size: int, del: string): string =
-  result = "+" 
+func `*`(size: int, del: string): string {.inline.} =
+  result = "+"
   for i in countup(0, size):
     result &= del
   return result & "+"
 
-proc getMaxLengthRow(rs: seq[tuple[r: Row, length: int]]): int =
-  var position = 0
-  var currentMaxSize = 0
-  for idx, rx in rs:
-    if rx.r.join("|").len > currentMaxSize:
-      currentMaxSize = rx.r.len
-      position = idx 
-  return position
-
-proc getQueryColumns(csvs: seq[Csv], query: string): seq[string] =
+func getQueryColumns(csvs: seq[Csv], query: string): seq[string] =
   let columnsRequested = query.toLowerAscii().split("from")[0].replace("select", "").strip().split(",")
   var columns: seq[string] = @[]
   if columnsRequested[0] == "*":
@@ -233,7 +216,7 @@ proc getQueryColumns(csvs: seq[Csv], query: string): seq[string] =
 
   return columnsRequested.mapIt(it.strip())
 
-proc getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
+func getLongestWordsByPosition(rs: seq[tuple[r: Row, length: int]]): seq[int] =
   var lengths: seq[int] = newSeq[int](rs[0].r.len)
   for row in rs:
     for idx, word in row.r:
@@ -249,19 +232,18 @@ proc exportResults(columns: seq[string], resultSet: seq[seq[string]]): string =
     if idx == 0:
       fs.writeLine(columns.join(","))
     fs.writeLine(row.join(","))
-  
+
   return generatedFilePath
 
 proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: bool = false) =
   var queryColumns = getQueryColumns(csvs, query)
-  var rows: seq[tuple[r: Row, length: int]] = @[]  
+  var rows: seq[tuple[r: Row, length: int]] = @[]
   for row in db.connection.fastRows(SqlQuery(query)):
     rows.add((
-              r: row, 
+              r: row,
               length: ("|" & row.join(",")).len
               )
             )
-  var maxLengthPos = getMaxLengthRow(rows)
   var maxLengthOfWordsByPosition = getLongestWordsByPosition(rows)
   var fin: seq[seq[string]] = @[]
   var columns: seq[string] = @[]
@@ -281,13 +263,13 @@ proc displayResults(db: Database, csvs: seq[Csv], query: string, exportResult: b
   for row in fin:
     echo("|" & row.join("|") & " |")
     echo(row.join("|").len * "-")
-  
+
   if exportResult:
-    let exportResultHeader = """
-----------
-::Export::
-----------
-"""
+    const exportResultHeader = """
+    ----------
+    ::Export::
+    ----------
+    """.unindent
     styledWriteLine(stdout, fgRed, exportResultHeader, resetStyle)
     let generatedCsvPath = exportResults(queryColumns, rows.mapIt(it.r))
     styledWriteLine(stdout, fgGreen, "File is ready & can be located in: " & generatedCsvPath, resetStyle)
@@ -296,29 +278,31 @@ proc parseQuery(query: string): (seq[Csv], string) =
   let csvsPaths = re.findAll(query, re"'(.*?).csv'")
   var csvs = newSeqOfCap[Csv](csvsPaths.len)
   var newQuery = query
-  let propertiesHeader ="""
-----------------------
-::Parsing Properties::
-----------------------"""
+  const propertiesHeader = """
+  ----------------------
+  ::Parsing Properties::
+  ----------------------""".unindent
   styledWriteLine(stdout, fgRed, propertiesHeader, resetStyle)
 
   for idx, csvPath in csvsPaths:
+    doAssert existsFile(csvPath.replace("'", "")), "\nCSV File not found: " & csvPath
     styledWriteLine(stdout, fgGreen, fmt"t{idx + 1} = {csvPath}", resetStyle)
     let csv = appendCsv(csvPath.replace("'", ""), fmt"t{idx + 1}", true)
     csvs.add(csv)
     newQuery = newQuery.replace(csvPath.replace("'", ""), fmt"t{idx + 1}")
-    
+
 
   return (csvs, newQuery)
-  
+
 proc csvQL(query: string, exportResult: bool = false) =
+  doAssert query.len > 0, "\nSQL Query must not be empty string."
   let startTime = cpuTime()
   let db = openConnection()
   let (csvs, adjustedQuery) = parseQuery(query)
-  let generatedQueryHeader = """
--------------------
-::Generated Query::
--------------------"""
+  const generatedQueryHeader = """
+  -------------------
+  ::Generated Query::
+  -------------------""".unindent
   styledWriteLine(stdout, fgRed, generatedQueryHeader, resetStyle)
   styledWriteLine(stdout, fgGreen, adjustedQuery, resetStyle)
 
@@ -326,20 +310,19 @@ proc csvQL(query: string, exportResult: bool = false) =
     parseCsv(csv)
     db.createTableUsingCsvProperties(csv)
     db.insertCsvRowsIntoTable(csv)
-  let queryResultHeader = """
-----------
-::Result::
-----------"""
+  const queryResultHeader = """
+  ----------
+  ::Result::
+  ----------""".unindent
   styledWriteLine(stdout, fgRed, queryResultHeader, resetStyle)
   displayResults(db, csvs, adjustedQuery, exportResult)
-  styledWriteLine(stdout, fgYellow, fmt"* Total Duration: {cpuTime() - startTime} seconds.", resetStyle)
+  styledWriteLine(stdout, fgYellow, fmt"* Total Duration: {cpuTime() - startTime:.6f} seconds.", resetStyle)
 
 when isMainModule:
-  dispatch(csvQL, help = { "query" : 
+  setControlCHook((proc {.noconv.} = quit" CTRL+C Pressed, shutting down, bye!. "))
+  dispatch(csvQL, help = { "query" :
 """Placing the query as an ANSI-SQL the table name should be replaced with the path to the csv instead
 i.e:
-1) SELECT name, day, hour FROM '/path/to/csv/test.csv' as t1 LIMIT 10 
+1) SELECT name, day, hour FROM '/path/to/csv/test.csv' as t1 LIMIT 10
 2) SELECT name, lastname, birthday FROM '/path/to/csv/test.csv' as t1 LEFT JOIN '/path/to/csv/test2.csv' as t2 ON t1.name = t2.name
 """, "exportResult": "set to true if you want to export the result set." })
-
-
